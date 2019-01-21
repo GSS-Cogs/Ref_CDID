@@ -18,7 +18,14 @@ pipeline {
             steps {
                 script {
                     def pmd = pmdConfig("pmd")
-                    String draftId = pmd.drafter.findDraftset(env.JOB_NAME).id
+                    String draftId
+                    try {
+                        oldDraftId = pmd.drafter.findDraftset(env.JOB_NAME).id
+                    } catch (Exception e) {
+                        echo "No old draftset."
+                    } finally {
+                        draftId = pmd.drafter.createDraftset(env.JOB_NAME).id
+                    }
                     String graph = "http://gss-data.org.uk/def/cdid_legacy"
                     pmd.drafter.deleteGraph(draftId, graph)
                     pmd.drafter.addData(draftId, "${WORKSPACE}/out/cdids.ttl", 'text/turtle', 'UTF-8', graph)
