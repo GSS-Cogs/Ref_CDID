@@ -3,7 +3,7 @@ pipeline {
         label 'master'
     }
     stages {
-        stage('Transform') {
+        stage('Create missing CDIDs') {
             agent {
                 docker {
                     image 'cloudfluff/databaker'
@@ -14,26 +14,21 @@ pipeline {
                 sh 'jupyter-nbconvert --to python --stdout cdid2rdf.ipynb | python'
             }
         }
-        stage('Publish results') {
+        stage('Upload CDIDs') {
             steps {
                 script {
-                    configFileProvider([configFile(fileId: 'pmd', variable: 'configfile')]) {
-                        def config = readJSON(text: readFile(file: configfile))
-                        String PMD = config['pmd_api']
-                        String credentials = config['credentials']
-                        def drafts = drafter.listDraftsets(PMD, credentials, 'owned')
-                        def jobDraft = drafts.find { it['display-name'] == env.JOB_NAME }
-                        if (jobDraft) {
-                            drafter.deleteDraftset(PMD, credentials, jobDraft.id)
-                        }
-                        def newJobDraft = drafter.createDraftset(PMD, credentials, env.JOB_NAME)
-                        String graph = "http://gss-data.org.uk/def/cdid"
-                        drafter.deleteGraph(PMD, credentials, newJobDraft.id, graph)
-                        drafter.addData(PMD, credentials, newJobDraft.id,
-                                        readFile(file: "out/cdids.ttl"),
-                                        'text/turtle', graph)
-                        drafter.publishDraftset(PMD, credentials, newJobDraft.id)
-                    }
+                    def pmd = pmdConfig("pmd")
+                    String draftId = pmd.drafter.findDraftset(env.JOB_NAME).id
+                    String graph = "http://gss-data.org.uk/def/cdid_legacy"
+                    pmd.drafter.deleteGraph(draftId, graph)
+                    pmd.drafter.addData(draftId, "${WORKSPACE}/out/cdids.ttl", 'text/turtle', 'UTF-8', graph)
+                }
+            }
+        }
+        stage('Publish') {
+            steps {
+                script {
+                    jobDraft.publish()
                 }
             }
         }
